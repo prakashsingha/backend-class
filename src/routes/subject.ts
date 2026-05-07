@@ -2,6 +2,7 @@ import express from "express";
 import { and, desc, eq, getTableColumns, ilike, or, sql } from "drizzle-orm";
 import { departments, subjects } from "../db/schema";
 import { db } from "../db/db";
+import { escapeLikePattern, parsePositiveIntQuery } from "../utils/query";
 
 const subjectRouter = express.Router();
 
@@ -9,8 +10,16 @@ const subjectRouter = express.Router();
 subjectRouter.get("/", async (req, res) => {
   try {
     const { search, department, page = 1, limit = 10 } = req.query;
-    const currentPage = Math.max(1, Number(page));
-    const limitPerPage = Math.max(1, Number(limit));
+    const currentPage = parsePositiveIntQuery(
+      page as string | string[] | undefined,
+      1,
+    );
+    const requestedLimit = parsePositiveIntQuery(
+      limit as string | string[] | undefined,
+      10,
+    );
+
+    const limitPerPage = Math.min(requestedLimit, 100);
     const offset = (currentPage - 1) * limitPerPage;
 
     const filterCoditions = [];
@@ -18,14 +27,16 @@ subjectRouter.get("/", async (req, res) => {
     if (search) {
       filterCoditions.push(
         or(
-          ilike(subjects.name, `%${search}%`),
-          ilike(subjects.code, `%${search}%`),
+          ilike(subjects.name, `%${escapeLikePattern(search as string)}%`),
+          ilike(subjects.code, `%${escapeLikePattern(search as string)}%`),
         ),
       );
     }
 
     if (department) {
-      filterCoditions.push(ilike(departments.name, `%${department}%`));
+      filterCoditions.push(
+        ilike(departments.name, `%${escapeLikePattern(department as string)}%`),
+      );
     }
 
     const whereClause =
